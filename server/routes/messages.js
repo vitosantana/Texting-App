@@ -1,11 +1,13 @@
 const express = require('express');
 const Message = require('../models/Message');
-const authMiddleware = require('../middleware/authmiddleware');
+const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 router.post('/', authMiddleware, async (req, res) => {
   try {
+     console.log('POST /messages body:', req.body);
+
     const { senderId, receiverId, text } = req.body;
 
     const message = await Message.create({
@@ -14,8 +16,12 @@ router.post('/', authMiddleware, async (req, res) => {
       text
     });
 
+    console.log('Saved message:', message);
+
     res.status(201).json(message);
   } catch (error) {
+
+    console.log('MESSAGE POST ERROR:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

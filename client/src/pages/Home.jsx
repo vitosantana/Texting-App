@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { getUsers } from '../api/auth';
 import { receiveMessages, sendMessageToDb } from '../api/messages';
+import './Home.css';
+import { MessageSquare, CircleArrowOutUpLeft } from 'lucide-react';
 
 const socket = io('http://localhost:5000');
 
@@ -16,20 +18,22 @@ function Home() {
 
   useEffect(() => {
     if (!currentUser) return;
-
+    // Enables the backend to map user IDS to socket IDS
     socket.emit('join', currentUser.id);
-
+    //Listens for live incoming messages from the backend
     socket.on('receiveMessage', (message) => {
-      if (selectedUser && message.senderId === selectedUser._id) {
+      /* Only do something if a user is selected
+      and only add the message if it came from the user whose chat is currently open*/
+      if (selectedUser && String (message.senderId) === String(selectedUser._id)) {
         setMessages((prev) => [...prev, message]);
       }
     });
-
+// removes the listener
     return () => {
       socket.off('receiveMessage');
     };
   }, [currentUser, selectedUser]);
-
+//Loads the list of users 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -51,12 +55,13 @@ function Home() {
 
     try {
       const { data } = await receiveMessages(user._id, token);
+      console.log('Fetched messages:', data);
       setMessages(data);
     } catch (error) {
       console.log(error);
     }
   };
-
+/* validates input, build a message object, seaves it to the Db, emit it live, adds to the current UI and clears the input */
   const handleSend = async () => {
     if (!text.trim() || !selectedUser) return;
 
@@ -82,55 +87,119 @@ function Home() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/';
+  };
+
   return (
-    <div style={{ display: 'flex', gap: '20px', padding: '20px' }}>
-      <div style={{ width: '200px' }}>
-        <h2>Users</h2>
-        {users.map((user) => (
-          <div
-            key={user._id}
-            onClick={() => handleSelectUser(user)}
-            style={{ cursor: 'pointer', marginBottom: '10px' }}
-          >
-            {user.username}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ flex: 1 }}>
-        <h2>
-          {selectedUser ? `Chat with ${selectedUser.username}` : 'Select a user'}
-        </h2>
-
-        <div
-          style={{
-            border: '1px solid #ccc',
-            minHeight: '300px',
-            padding: '10px',
-            marginBottom: '10px'
-          }}
-        >
-          {messages.map((msg, index) => (
-            <div key={index}>
-              <strong>
-                {msg.senderId === currentUser.id ? 'You' : selectedUser?.username}:
-              </strong>{' '}
-              {msg.text}
-            </div>
-          ))}
+    <div className="app-frame">
+      <aside className="icon-sidebar">
+        <div className="icon-sidebar-top">
+          <button className="icon-btn active" title="Chats">
+          <MessageSquare />  
+          </button>
         </div>
 
-        {selectedUser && (
-          <div>
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Type a message"
-            />
-            <button onClick={handleSend}>Send</button>
+        <div className="icon-sidebar-bottom">
+          <button className="icon-btn" onClick={handleLogout} title="Logout">
+            <CircleArrowOutUpLeft />
+          </button>
+        </div>
+      </aside>
+
+      <section className="chat-list-panel">
+        <div className="chat-list-header">
+          <h1>Chats</h1>
+          <p className="logged-in-user">@{currentUser?.username}</p>
+        </div>
+
+        <div className="search-bar-wrap">
+          <input
+            className="search-bar"
+            type="text"
+            placeholder="Search or start a new chat"
+            disabled
+          />
+        </div>
+
+        <div className="chat-list">
+          {users.map((user) => (
+            <button
+              key={user._id}
+              className={`chat-list-item ${
+                selectedUser?._id === user._id ? 'selected' : ''
+              }`}
+              onClick={() => handleSelectUser(user)}
+            >
+              <div className="chat-avatar">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="chat-list-text">
+                <span className="chat-name">{user.username}</span>
+                <span className="chat-preview">Tap to open chat</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <main className="conversation-panel">
+        {selectedUser ? (
+          <>
+            <div className="conversation-header">
+              <div className="conversation-user">
+                <div className="chat-avatar small">
+                  {selectedUser.username.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h2>{selectedUser.username}</h2>
+                  <p>Online</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="messages-panel">
+              {messages.map((msg, index) => {
+                const isMine = String(msg.senderId) === String(currentUser.id);
+
+                return (
+                  <div
+                    key={index}
+                    className={`message-row ${isMine ? 'mine' : 'theirs'}`}
+                  >
+                    <div className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="message-composer">
+              <input
+                className="composer-input"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Type a message"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSend();
+                }}
+              />
+              <button className="send-button" onClick={handleSend}>
+                Send
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="empty-conversation">
+            <h2>Welcome to Chat</h2>
+            <p>Select a conversation from the left.</p>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
