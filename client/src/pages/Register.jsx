@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { registerUser } from '../api/auth';
+import './Register.css';
 
 function Register() {
-    const [form, setForm] = useState({ username: '', password: '' });
+    const [form, setForm] = useState({ username: '', password: '', email: '', dob: '' });
     const navigate = useNavigate();
 
     const handleChange = (e) => {
@@ -13,37 +14,93 @@ function Register() {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        try {
-            await registerUser(form);
-            alert('Account created');
-            navigate('/');
-        } catch (error) {
-            alert('Register failed');
-        }
-    }
-    return (
-        <div>
-            <h1>Register</h1>
-            <form onSubmit={handleSubmit}>
-                <input
-                name="username"
-                placeholder="Username"
-                value={form.username}
-                onChange={handleChange}
-                />
+       try {
+        await registerUser({
+            username: form.username,
+            password: form.password
+        });
 
-                <input
-                name="password"
-                type="password"
-                placeholder="Password"
-                value={form.password}
-                onChange={handleChange}
-                />
-                <button type="submit">Register</button>
-            </form>
-            <p>
-                Already have an account? <Link to="/">Login</Link>
-            </p>
+        alert('Account created successfully');
+        naviagte('/login');
+       } catch (error) {
+        alert(error.response?.data?.message || 'Registration failed')
+       }
+    };
+    return (
+        <div className="register-page">
+            <div className="register-bg-glow register-bg-glow-1"></div>
+            <div className="register-bg-glow register-bg-glow-2"></div>
+            <div className="register-bg-glow register-bg-glow-3"></div>
+
+            <header className="register-topbar">
+                <Link to="/" className="register-brand">
+                TextingApp
+                </Link>
+            </header>
+
+            <main className="register-center">
+                <div className="register-card">
+                    <div className="register-panel">
+                        <h1>Create an account</h1>
+                        <p className="register-subtext">
+                            Join and start chatting.
+                        </p>
+
+                        <form onSubmit={handleSubmit} className="register-form">
+                            <label htmlFor="email">Email</label>
+                            <input 
+                            id="email"
+                            name="email"
+                            type="email"
+                            value={form.email}
+                            onChange={handleChange}
+                            placeholder="Enter your email"
+                            required
+                            />
+
+                            <label htmlFor="username">Username</label>
+                            <input 
+                            id="username"
+                            name="username"
+                            type="text"
+                            value={form.username}
+                            onChange={handleChange}
+                            placeholder="Choose a username"
+                            required
+                            />
+
+                            <label htmlFor="password">Password</label>
+                            <input 
+                            id="password"
+                            name="password"
+                            type="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            placeholder="Create a password"
+                            required
+                            />
+
+                            <label htmlFor="dob">Date of Birth</label>
+                            <input 
+                            id="dob"
+                            name="dob"
+                            type="date"
+                            value={form.dob}
+                            onChange={handleChange}
+                            required
+                            />
+
+                            <button type="submit" className="register-submit-btn">
+                                Create Account
+                            </button>
+                        </form>
+
+                        <p className="register-footer-text">
+                            Already have an account? <Link to="/login">Log In</Link>
+                        </p>
+                    </div>
+                </div>
+            </main>
         </div>
     );
 }
