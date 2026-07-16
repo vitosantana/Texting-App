@@ -206,7 +206,12 @@ input {
     background:
     radial-gradient(circle at center, rgba(255,255,255,0.02) 1px, transparent 1px),
     #0b141a;
-    background-size: 28px 28px;
+    background-image:
+     linear-gradient(rgba(8, 12, 22, 0.25), rgba(8, 12, 22, 0.25)),
+    url("/images/su.png");
+    background-size: auto 100%;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .message-row {
@@ -223,12 +228,19 @@ input {
 }
 
 .message-bubble {
-    max-width: 65%;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 14px;
+   display: flex;
+   flex-direction: column;
+   gap: 6px;
+}
+
+.message-text {
     line-height: 1.4;
-    word-break: break-word;
+}
+
+.message-time {
+    font-size: 11px;
+    opacity: 0.7;
+    align-self: flex-end;
 }
 
 .message-bubble.mine {
@@ -297,3 +309,8 @@ input {
     color: #e9edef;
 }
    
+.typing-indicator {
+    margin: 8px 16px 0;
+    font-size: 13px;
+    color: #8696a0;
+}

@@ -162,6 +162,37 @@ body {
   right: 12%;
   animation-delay: 1s;
 }
+.landing-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  color: white;
+
+  background-image: url("/images/landing-background.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.landing-background-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+
+  background: linear-gradient(
+    90deg,
+    rgba(5, 8, 20, 0.72) 0%,
+    rgba(5, 8, 20, 0.46) 42%,
+    rgba(5, 8, 20, 0.18) 100%
+  );
+}
+
+.landing-navbar,
+.hero-section {
+  position: relative;
+  z-index: 2;
+}
 
 @keyframes loginGlowFloat {
   0%,

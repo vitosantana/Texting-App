@@ -165,6 +165,47 @@ body {
     animation-delay: 1s;
 }
 
+.dob-label {
+    margin-bottom: 8px;
+    color: #f2f3f5;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.dob-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.dob-row select,
+.dob-row input {
+    height: 44px;
+    border: 1px solid #1e1f22;
+    border-radius: 4px;
+    background: #1e1f22;
+    color: white;
+    outline: none;
+    padding: 0 12px;
+    font-size: 14px;
+
+}
+
+.dob-row select {
+    flex: 1.4;
+    appearance: none;
+}
+
+.dob-row input {
+    flex: 1;
+}
+
+.dob-row select:focus,
+.dob-row input:focus {
+    border-color: #5b6ef5;
+}
+
 @keyframes registerGlowFloat {
     0%,
     100% {

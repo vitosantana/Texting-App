@@ -33,7 +33,7 @@ function Login() {
 
             <header className="login-topbar">
                <Link to="/" className="login-brand">
-    Texting APP
+    Causerie
   </Link>
             </header>
 

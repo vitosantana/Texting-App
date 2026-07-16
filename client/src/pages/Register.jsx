@@ -4,7 +4,7 @@ import { registerUser } from '../api/auth';
 import './Register.css';
 
 function Register() {
-    const [form, setForm] = useState({ username: '', password: '', email: '', dob: '' });
+    const [form, setForm] = useState({ username: '', password: '', email: '', birthMonth: '', birthDay: '', birthYear: '' });
     const navigate = useNavigate();
 
     const handleChange = (e) => {
@@ -13,15 +13,18 @@ function Register() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+          console.log('register submit fired');
 
        try {
         await registerUser({
+            email: form.email,
             username: form.username,
-            password: form.password
+            password: form.password,
+            dob: `${form.birthMonth} ${form.birthDay}, ${form.birthYear}`
         });
 
         alert('Account created successfully');
-        naviagte('/login');
+        navigate('/login');
        } catch (error) {
         alert(error.response?.data?.message || 'Registration failed')
        }
@@ -34,7 +37,7 @@ function Register() {
 
             <header className="register-topbar">
                 <Link to="/" className="register-brand">
-                TextingApp
+                Causerie
                 </Link>
             </header>
 
@@ -80,15 +83,62 @@ function Register() {
                             required
                             />
 
-                            <label htmlFor="dob">Date of Birth</label>
-                            <input 
-                            id="dob"
-                            name="dob"
-                            type="date"
-                            value={form.dob}
-                            onChange={handleChange}
-                            required
-                            />
+                            <label className="dob-label">Date of Birth</label>
+
+                            <div className="dob-row">
+                                <select
+                                name="birthMonth"
+                                value={form.birthMonth}
+                                onChange={handleChange}
+                                required
+                                >
+                                <option value="">Month</option>
+                                <option value="January">January</option>
+                                <option value="February">February</option> 
+                                <option value="March">March</option> 
+                                <option value="April">April</option> 
+                                <option value="May">May</option> 
+                                <option value="June">June</option> 
+                                <option value="July">July</option> 
+                                <option value="August">August</option> 
+                                <option value="September">September</option> 
+                                <option value="October">October</option> 
+                                <option value="November">November</option> 
+                                <option value="December">December</option>     
+                                </select>
+                                
+                                <select
+                                name="birthDay"
+                                value={form.birthDay}
+                                onChange={handleChange}
+                                required
+                                >
+                                    {/* Make an array of 31 items(days) */}
+                                    <option value="">Day</option>
+                                    {Array.from({ length: 31 }, (_, i) => (
+                                        <option key={i + 1} value= {i + 1}>{i + 1}</option>
+                                    ))}
+                                </select>
+
+                                <select
+                                name="birthYear"
+                                value={form.birthYear}
+                                onChange={handleChange}
+                                required
+                                >
+                                    {/* Generates a 100 year options */}
+                                    <option value="">Year</option>
+                                    {Array.from({ length: 100 }, (_, i) => {
+                                        const year = new Date().getFullYear() -i;
+                                        return (
+                                            <option key={year} value={year}>{year}</option>
+                                        );
+                                    })}
+                                </select>
+                                    
+                            </div>
+
+                           
 
                             <button type="submit" className="register-submit-btn">
                                 Create Account

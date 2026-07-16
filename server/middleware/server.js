@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 
 dotenv.config();
 
+
 const authRoutes = require('./routes/auth');
 const messageRoutes = require('./routes/messages');
 
@@ -37,6 +38,7 @@ io.on('connection', (socket) => {
 
   socket.on('join', (userId) => {
     onlineUsers[userId] = socket.id;
+     console.log('user joined socket map:', userId, socket.id);
   });
 
   socket.on('sendMessage', ({ senderId, receiverId, text }) => {
@@ -52,6 +54,32 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Typing Indicator
+socket.on('typing', ({ senderId, receiverId }) => {
+   console.log('SERVER typing received:', { senderId, receiverId });
+  console.log('onlineUsers map:', onlineUsers);
+  const receiverSocketId = onlineUsers[receiverId];
+  if (receiverSocketId) {
+       console.log('SERVER forwarding typing to:', receiverSocketId);
+    io.to(receiverSocketId).emit('typing', {senderId});
+  } else {
+    console.log('receiver not online for typing event');
+  }
+});
+
+socket.on('stopTyping', ({ senderId, receiverId }) => {
+  console.log('stopTyping event received:', senderId, receiverId);
+   console.log('onlineUsers map:', onlineUsers);
+  const receiverSocketId = onlineUsers[receiverId];
+
+  if (receiverSocketId) {
+    console.log('forwarding stopTyping to socket:', receiverSocketId);
+    io.to(receiverSocketId).emit('stopTyping', { senderId});
+  } else {
+    console.log('receiver not online for stopTyping event');
+  }
+});
+
   socket.on('disconnect', () => {
     for (const userId in onlineUsers) {
       if (onlineUsers[userId] === socket.id) {
@@ -65,3 +93,4 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

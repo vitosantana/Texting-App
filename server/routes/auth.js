@@ -7,20 +7,30 @@ const authMiddleware = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.post('/register', async (req,res) => {
+    console.log('register route hit:', req.body);
     try {
-        const { username, password } = req.body;
+        const { email, username, password, dob } = req.body;
 
-        const existingUser = await User.findOne({ username });
+        const existingUser = await User.findOne({ $or: [{ username }, { email}]})
         if (existingUser) {
-            return res.status(400).json({ message: 'Username already exists' });
+            if (existingUser.username ===username) {
+                return res.status(400).json({ message: 'Username already exist'});
+            }
+            
+            if (existingUser.email === email) {
+              return res.status(400).json({ message: 'Email already exists' });  
+            }
+           
 
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await User.create({
+            email,
             username,
-            password: hashedPassword
+            password: hashedPassword,
+            dob
         });
 
         res.status(201).json({ message: 'User created successfully'});

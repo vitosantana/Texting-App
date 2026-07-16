@@ -32,7 +32,7 @@ function Landing() {
             </div>
 
             <header className="landing-navbar">
-                <div className="brand">TextingApp</div>
+                <div className="brand">Causerie</div>
                 <Link to="/Landing"></Link>
                 
 
