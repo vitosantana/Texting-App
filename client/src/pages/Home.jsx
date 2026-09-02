@@ -1,9 +1,9 @@
-import { useEffect, useState} from 'react';
+import { useEffect, useState, useRef} from 'react';
 import { io } from 'socket.io-client';
 import { getUsers } from '../api/auth';
 import { receiveMessages, sendMessageToDb } from '../api/messages';
 import './Home.css';
-import { MessageSquare, CircleArrowOutUpLeft } from 'lucide-react';
+import { MessageSquare, CircleArrowOutUpLeft, ChevronDown } from 'lucide-react';
 
 const socket = io('http://localhost:5000');
 
@@ -18,6 +18,11 @@ function Home() {
   const currentUser = JSON.parse(localStorage.getItem('user'));
   const currentUserId = currentUser?.id || currentUser?._id;
   const selectedUserId = selectedUser?._id;
+  const [onlineUserIds, setOnlineUserIds] = useState([]);
+  const messagesEndRef = useRef(null);
+  const messagesPanelRef = useRef(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState({});
   
 
  
@@ -54,12 +59,35 @@ useEffect(() => {
 
  useEffect(() => {
     const handleReceiveMessage = (message) => {
-      if (
-        selectedUserId &&
-        String(message.senderId) === String(selectedUserId)
-      ) {
+      const senderId = String(message.senderId);
+      const activeUserId = selectedUserId 
+      ? String(selectedUserId) : null;
+
+      //Update the chat preview
+      setChatPrev((prev) => ({
+        ...prev,
+        [senderId]: {
+          lastMessage: message.text,
+          createdAt: message.createdAt
+        }
+      }));
+      // Checks if the received message belongs to the current conversation
+      if (activeUserId === senderId) {
         setMessages((prev) => [...prev, message]);
+
+        socket.emit('markMessagesSeen', {
+          senderId: message.senderId,
+          receiverId: currentUserId
+        });
+
+        return;
       }
+
+      //Increase unread count when the conversation isn't open
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [senderId]: (prev[senderId] || 0) + 1
+      }));
     };
 
     const handleTyping = ({ senderId }) => {
@@ -83,14 +111,48 @@ useEffect(() => {
       }
     };
 
+    const handleOnlineUsers = (userIds) => {
+      console.log('Online user IDS received:', userIds);
+
+      setOnlineUserIds(
+        userIds.map((userId) => String(userId))
+      );
+    };
+    
+const handleMessageStatusUpdated = ({ messageId, status }) => {
+  setMessages((prev) =>
+    prev.map((msg) =>
+      String(msg._id) === String(messageId)
+        ? { ...msg, status }
+        : msg
+    )
+  );
+};
+
+const handleMessagesSeen = ({ messageIds }) => {
+  setMessages((prev) =>
+    prev.map((msg) =>
+      messageIds.includes(String(msg._id))
+        ? { ...msg, status: 'seen' }
+        : msg
+    )
+  );
+};
+
     socket.on('receiveMessage', handleReceiveMessage);
     socket.on('typing', handleTyping);
     socket.on('stopTyping', handleStopTyping);
+    socket.on('onlineUsers', handleOnlineUsers);
+    socket.on('messageStatusUpdated', handleMessageStatusUpdated);
+    socket.on('messagesSeen', handleMessagesSeen);
 
     return () => {
       socket.off('receiveMessage', handleReceiveMessage);
       socket.off('typing', handleTyping);
       socket.off('stopTyping', handleStopTyping);
+      socket.off('onlineUsers', handleOnlineUsers);
+      socket.off('messageStatusUpdated',handleMessageStatusUpdated);
+      socket.off('messagesSeen', handleMessagesSeen);
     };
   
  }, [selectedUserId]);
@@ -115,6 +177,32 @@ useEffect(() => {
   }
 }, [token, currentUserId]);
 
+//Scrolls to the nearest message whenever messages change
+
+const scrollToBottom = (behavior = 'smooth') => {
+  messagesEndRef.current?.scrollIntoView({
+    behavior,
+    block: 'end'
+  });
+};
+
+useEffect(() => {
+  const panel = messagesPanelRef.current;
+
+  if (!panel) return;
+
+  const distanceFromBottom = 
+  panel.scrollHeight - panel.scrollTop - panel.clientHeight;
+
+  const isNearBottom = distanceFromBottom < 120;
+
+  if (isNearBottom) {
+    scrollToBottom('smooth');
+  } else {
+    setShowScrollButton(true);
+  }
+}, [messages]);
+
   const handleSelectUser = async (user) => {
   if (selectedUserId && text.trim()) {
     socket.emit('stopTyping', {
@@ -123,15 +211,27 @@ useEffect(() => {
     });
   }
 
+  setUnreadCounts((prev) => ({
+    ...prev,
+    [String(user._id)]: 0
+  }));
+
   setSelectedUser(user);
   setText('');
   setIsTyping(false);
 
   try {
     const { data } = await receiveMessages(user._id, token);
-    console.log('Fetched messages:', data);
 
     setMessages(data);
+    socket.emit('markMessagesSeen', {
+      senderId: user._id,
+      receiverId: currentUserId
+    });
+
+    requestAnimationFrame(() => {
+      scrollToBottom('auto');
+    });
 
     if (data.length > 0) {
       const last = data[data.length - 1];
@@ -152,8 +252,6 @@ useEffect(() => {
   const handleSend = async () => {
     if (!text.trim() || !selectedUser) return;
 
-    const timestamp= new Date().toISOString();
-
     const newMessage = {
       senderId: currentUserId,
       receiverId: selectedUserId,
@@ -161,9 +259,12 @@ useEffect(() => {
     };
 
     try {
-      await sendMessageToDb(newMessage, token);
+      const {data: savedMessage } = await sendMessageToDb(
+        newMessage,
+        token
+      );
 
-      socket.emit('sendMessage', newMessage);
+      socket.emit('sendMessage', savedMessage);
       
       socket.emit('stopTyping', {
         senderId: currentUserId,
@@ -174,14 +275,14 @@ useEffect(() => {
 
       setMessages((prev) => [
         ...prev,
-        { ...newMessage, createdAt: timestamp }
+        savedMessage
       ]);
 
       setChatPrev((prev) => ({
         ...prev,
         [selectedUser._id]: {
-          lastMessage: newMessage.text,
-          createdAt: timestamp
+          lastMessage: savedMessage.text,
+          createdAt: savedMessage.createdAt
         }
       }));
 
@@ -196,6 +297,9 @@ useEffect(() => {
     localStorage.removeItem('user');
     window.location.href = '/';
   };
+console.log('onlineUserIds:', onlineUserIds);
+console.log('selectedUserId:', selectedUserId);
+  const selectedUserIsOnline = selectedUserId && onlineUserIds.includes(String(selectedUserId));
 
   return (
     <div className="app-frame">
@@ -241,12 +345,32 @@ useEffect(() => {
                 {user.username.charAt(0).toUpperCase()}
               </div>
 
+              <div className="chat-list-content">
+
               <div className="chat-list-text">
-                <span className="chat-name">{user.username}</span>
-                <span className="chat-preview">
+                <span className={`chat-name ${
+                  unreadCounts[String(user._id)] > 0 ? 'unread' : ''
+                }`}
+                >
+                  {user.username}
+                  </span>
+                <span className={`chat-preview ${
+                  unreadCounts[String(user._id)] > 0 ? 'unread' : ''
+                }`}
+                >
                   {chatPrev[user._id]?.lastMessage || 'Tap to open chat'}
                 </span>
               </div>
+
+              {unreadCounts[String(user._id)] > 0 && (
+                <span className = "unread-count">
+                  {unreadCounts[String(user._id)] > 99
+                  ? '99+'
+                : unreadCounts[String(user._id)]}
+                </span>
+              )}
+              </div>
+              
             </button>
           ))}
         </div>
@@ -264,7 +388,7 @@ useEffect(() => {
 
         <div className="conversation-meta">
           <h2>{selectedUser.username}</h2>
-          <p>Online</p>
+          <p>{selectedUserIsOnline ? 'Online' : 'Offline'}</p>
         </div>
       </div>
 
@@ -272,7 +396,19 @@ useEffect(() => {
         <p className="typing-indicator">{selectedUser.username} is typing...</p>
       )}
 
-      <div className="messages-panel">
+      <div className="messages-panel"
+        ref={messagesPanelRef}
+        onScroll={() => {
+          const panel = messagesPanelRef.current;
+
+          if (!panel) return;
+
+          const distanceFromBottom =
+          panel.scrollHeight - panel.scrollTop - panel.clientHeight;
+
+          setShowScrollButton(distanceFromBottom > 120);
+        }}
+        >
         {messages.map((msg, index) => {
           const isMine = String(msg.senderId) === String(currentUserId);
 
@@ -288,12 +424,35 @@ useEffect(() => {
                     hour: 'numeric',
                     minute: '2-digit'
                   })}
+
+                  {isMine && (
+                    <span className={`message-status ${msg.status}`}>
+                      {msg.status === 'sent' && '✓' }
+                      {msg.status === 'delivered' && '✓✓'}
+                      {msg.status === 'seen' && '✓✓'}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
           );
         })}
+
+        <div ref={messagesEndRef} />
       </div>
+      {showScrollButton && (
+        <button
+        className="scroll-to-bottom-button"
+        onClick={() => {
+          scrollToBottom('smooth');
+          setShowScrollButton(false);
+        }}
+        aria-label="Scroll to newest message"
+        >
+          <ChevronDown size={22} />
+
+        </button>
+      )}
 
       <div className="message-composer">
         <input
@@ -324,6 +483,13 @@ useEffect(() => {
                 });
               }
               
+          }}
+
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSend();
+            }
           }}
           placeholder="Type a message"
         />

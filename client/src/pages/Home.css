@@ -145,8 +145,9 @@ input {
 
 .chat-list-text {
     display: flex;
-    flex-direction: column;
     min-width: 0;
+    flex: 1;
+    flex-direction: column;
 }
 
 .chat-name {
@@ -170,6 +171,7 @@ input {
     display: flex;
     flex-direction: column;
     background: #0b141a;
+    position: relative;
 }
 
 .conversation-header {
@@ -212,6 +214,25 @@ input {
     background-size: auto 100%;
     background-position: center;
     background-repeat: no-repeat;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.messages-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.messages-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+}
+
+.messages-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
 }
 
 .message-row {
@@ -264,6 +285,24 @@ input {
     align-items: center;
 }
 
+.message-status {
+ margin-left: 4px;
+ font-size: 13px;
+ font-weight: 600;   
+}
+
+.message-status.sent {
+    color: #8696a0;
+}
+
+.message-status.delivered {
+    color: #8696a0;
+}
+
+.message-status.seen {
+    color: #53bdeb;
+}
+
 .composer-input {
     flex: 1;
     border: none;
@@ -313,4 +352,57 @@ input {
     margin: 8px 16px 0;
     font-size: 13px;
     color: #8696a0;
+}
+
+.scroll-to-bottom-button {
+    position: absolute;
+    right: 22px;
+    bottom: 82px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: #202c33;
+    color: #d1d7db;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.scroll-to-bottom-button:hover {
+    background: #2a3942;
+}
+
+.chat-list-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+
+.unread-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #25d366;
+    color: #0b141a;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.chat-preview.unread {
+    color: #e9edef;
+    font-weight: 700;
 }

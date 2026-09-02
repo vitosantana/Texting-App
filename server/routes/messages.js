@@ -13,7 +13,8 @@ router.post('/', authMiddleware, async (req, res) => {
     const message = await Message.create({
       senderId,
       receiverId,
-      text
+      text,
+      status: 'sent'
     });
 
     console.log('Saved message:', message);

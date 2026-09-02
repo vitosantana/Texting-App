@@ -15,6 +15,12 @@ const messageSchema = new mongoose.Schema (
         text: {
             type: String,
             required: true
+        },
+        // Read Receipts
+        status: {
+            type: String,
+            enum: ['sent', 'delivered', 'seen'],
+            default: 'sent'
         }
     },
     { timestamps: true}

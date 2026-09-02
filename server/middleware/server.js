@@ -32,17 +32,30 @@ mongoose.connect(process.env.MONGO_URI)
   .catch((err) => console.log(err));
 
 const onlineUsers = {};
-
+//Connects to Socket.IO
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('join', (userId) => {
-    onlineUsers[userId] = socket.id;
-     console.log('user joined socket map:', userId, socket.id);
+    //converts the user Id into a string
+    const normalizedUserId = String(userId);
+    onlineUsers[normalizedUserId] = socket.id;
+     console.log('user joined socket map:', {
+      userId: normalizedUserId,
+      socketId: socket.id
+     });
+
+     console.log('Online users:', onlineUsers);
+
+     io.emit('onlineUsers', Object.keys(onlineUsers));
+
+   
+      
   });
 
+
   socket.on('sendMessage', ({ senderId, receiverId, text }) => {
-    const receiverSocketId = onlineUsers[receiverId];
+    const receiverSocketId = onlineUsers[String(receiverId)];
 
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('receiveMessage', {
@@ -57,10 +70,8 @@ io.on('connection', (socket) => {
   // Typing Indicator
 socket.on('typing', ({ senderId, receiverId }) => {
    console.log('SERVER typing received:', { senderId, receiverId });
-  console.log('onlineUsers map:', onlineUsers);
-  const receiverSocketId = onlineUsers[receiverId];
+  const receiverSocketId = onlineUsers[String(receiverId)];
   if (receiverSocketId) {
-       console.log('SERVER forwarding typing to:', receiverSocketId);
     io.to(receiverSocketId).emit('typing', {senderId});
   } else {
     console.log('receiver not online for typing event');
@@ -69,7 +80,6 @@ socket.on('typing', ({ senderId, receiverId }) => {
 
 socket.on('stopTyping', ({ senderId, receiverId }) => {
   console.log('stopTyping event received:', senderId, receiverId);
-   console.log('onlineUsers map:', onlineUsers);
   const receiverSocketId = onlineUsers[receiverId];
 
   if (receiverSocketId) {
@@ -81,13 +91,21 @@ socket.on('stopTyping', ({ senderId, receiverId }) => {
 });
 
   socket.on('disconnect', () => {
+    let disconnectedUserId = null;
     for (const userId in onlineUsers) {
       if (onlineUsers[userId] === socket.id) {
+        disconnectedUserId = userId;
         delete onlineUsers[userId];
         break;
       }
     }
-    console.log('User disconnected:', socket.id);
+    console.log('User disconnected:', {
+      userId: disconnectedUserId,
+      socketId: socket.id
+    });
+    console.log('Online users:', onlineUsers);
+
+    io.emit('onlineUsers', Object.keys(onlineUsers));
   });
 });
 

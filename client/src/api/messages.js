@@ -10,7 +10,7 @@ export const receiveMessages = (userId, token) =>
     });
 
     export const sendMessageToDb = (data, token) => {
-        axios.post(API, data, {
+         return axios.post(API, data, {
             headers: {
                 Authorization: `Bearer ${token}`
             }
