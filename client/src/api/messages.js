@@ -16,3 +16,14 @@ export const receiveMessages = (userId, token) =>
             }
         })
     }
+
+    export const getConversationSummaries = (token) => {
+        return axios.get(
+            `${API}/conversation-summaries`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        );
+    };

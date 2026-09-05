@@ -258,6 +258,68 @@ input {
     line-height: 1.4;
 }
 
+.message-image {
+    display: block;
+    max-width: 280px;
+    max-height: 350px;
+    width: auto;
+    height: auto;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 5px;
+}
+
+.image-preview-container {
+    position: relative;
+    width: fit-content;
+    margin: 8px 16px;
+}
+
+.image-preview {
+    display: block;
+    max-width: 220px;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.remove-image-button {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.7);
+    color:white;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.image-file-input {
+    display: none;
+}
+
+.attachment-button {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #8696a0;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s ease,
+    color 0.2s ease;
+}
+
+.attachment-button:hover {
+    background: #374248;
+    color: #e9edef;
+}
+
 .message-time {
     font-size: 11px;
     opacity: 0.7;

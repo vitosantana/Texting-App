@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef} from 'react';
 import { io } from 'socket.io-client';
 import { getUsers } from '../api/auth';
-import { receiveMessages, sendMessageToDb } from '../api/messages';
+import { receiveMessages, sendMessageToDb, getConversationSummaries } from '../api/messages';
 import './Home.css';
-import { MessageSquare, CircleArrowOutUpLeft, ChevronDown } from 'lucide-react';
+import { MessageSquare, CircleArrowOutUpLeft, ChevronDown, Paperclip } from 'lucide-react';
+import { uploadImage } from '../api/imguploads';
 
 const socket = io('http://localhost:5000');
 
@@ -23,7 +24,8 @@ function Home() {
   const messagesPanelRef = useRef(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
-  
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
 
  
 // Connect/reconnect and join effect
@@ -55,6 +57,41 @@ useEffect(() => {
     socket.off('disconnect', handleDisconnect);
   };
 }, [currentUserId]);
+
+//Load Summaries (User Object)
+
+useEffect(() => {
+  const fetchConversationSummaries = async () => {
+    try {
+      const { data } =
+      await getConversationSummaries(token);
+
+      const previews = {};
+      const counts = {};
+      data.forEach((summary) => {
+        const userId = String(summary.userId);
+        previews[userId] = {
+          lastMessage: summary.lastMessage,
+          createdAt: summary.createdAt
+        };
+
+        counts[userId] = summary.unreadCount;
+      });
+
+      setChatPrev(previews);
+      setUnreadCounts(counts);
+    } catch (error) {
+      console.log(
+        'CONVERSATION SUMMARY ERROR:',
+        error
+      );
+    }
+  };
+
+  if (token && currentUserId) {
+    fetchConversationSummaries();
+  }
+}, [token, currentUserId]);
  //Message and typing listeners
 
  useEffect(() => {
@@ -177,6 +214,23 @@ useEffect(() => {
   }
 }, [token, currentUserId]);
 
+// Previews image when image is selected
+
+useEffect(() => {
+  if (!selectedImage) {
+    setImagePreview('');
+    return;
+  }
+
+  const previewUrl = URL.createObjectURL(selectedImage);
+
+  setImagePreview(previewUrl);
+
+  return () => {
+    URL.revokeObjectURL(previewUrl);
+  };
+}, [selectedImage]);
+
 //Scrolls to the nearest message whenever messages change
 
 const scrollToBottom = (behavior = 'smooth') => {
@@ -250,15 +304,30 @@ useEffect(() => {
 };
 /* validates input, build a message object, seaves it to the Db, emit it live, adds to the current UI and clears the input */
   const handleSend = async () => {
-    if (!text.trim() || !selectedUser) return;
+    if ((!text.trim() && !selectedImage) || !selectedUser) {
+      return;
+    }
+
+    try {
+         let imageUrl = '';
+
+      if (selectedImage) {
+        const { data } = await uploadImage(
+          selectedImage,
+          token
+        );
+
+        imageUrl = data.imageUrl;
+      }
+    
 
     const newMessage = {
       senderId: currentUserId,
       receiverId: selectedUserId,
-      text
+      text: text.trim(),
+      imageUrl
     };
 
-    try {
       const {data: savedMessage } = await sendMessageToDb(
         newMessage,
         token
@@ -287,6 +356,7 @@ useEffect(() => {
       }));
 
       setText('');
+      setSelectedImage(null);
     } catch (error) {
       console.log(error);
     }
@@ -300,7 +370,18 @@ useEffect(() => {
 console.log('onlineUserIds:', onlineUserIds);
 console.log('selectedUserId:', selectedUserId);
   const selectedUserIsOnline = selectedUserId && onlineUserIds.includes(String(selectedUserId));
+  // Creates a new user list that displays the most recent message
+  const sortedUsers = [...users].sort((a, b) => {
+    const aTime = chatPrev[a._id]?.createdAt
+    ? new Date (chatPrev[a._id].createdAt).getTime()
+    : 0;
 
+    const bTime = chatPrev[b._id]?.createdAt
+    ? new Date(chatPrev[b._id].createdAt).getTime()
+    : 0;
+
+    return bTime - aTime;
+  });
   return (
     <div className="app-frame">
       <aside className="icon-sidebar">
@@ -333,7 +414,7 @@ console.log('selectedUserId:', selectedUserId);
         </div>
 
         <div className="chat-list">
-          {users.map((user) => (
+          {sortedUsers.map((user) => (
             <button
               key={user._id}
               className={`chat-list-item ${
@@ -411,6 +492,8 @@ console.log('selectedUserId:', selectedUserId);
         >
         {messages.map((msg, index) => {
           const isMine = String(msg.senderId) === String(currentUserId);
+          // Scroll Logic for Images
+          const isLastMessage = index === messages.length -1;
 
           return (
             <div
@@ -418,7 +501,25 @@ console.log('selectedUserId:', selectedUserId);
               className={`message-row ${isMine ? 'mine' : 'theirs'}`}
             >
               <div className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}>
-                <span className="message-text">{msg.text}</span>
+              {msg.imageUrl && (
+                <img
+                src={`http://localhost:5000${msg.imageUrl}`}
+                alt="Message attachment"
+                className="message-image"
+
+                onLoad={() => {
+                  if (isLastMessage) {
+                    requestAnimationFrame(() => {
+                      scrollToBottom('smooth');
+                      setShowScrollButton(false);
+                    });
+                  }
+                }}
+                />
+              )}
+                {msg.text && (
+                  <span className="message-text">{msg.text}</span>
+                )}
                 <span className="message-time">
                   {new Date(msg.createdAt).toLocaleTimeString([], {
                     hour: 'numeric',
@@ -454,7 +555,52 @@ console.log('selectedUserId:', selectedUserId);
         </button>
       )}
 
+      {imagePreview && (
+        <div className = "image-preview-container">
+        <img
+        src={imagePreview}
+          alt="Selected attachment"
+          className="image-preview"
+          />
+          
+          <button
+          type="button"
+          className="remove-image-button"
+          onClick={() => setSelectedImage(null)}
+          >
+           × 
+          </button>
+          </div>
+      )}
+
       <div className="message-composer">
+        
+        {/* Image picker */}
+          <label
+        htmlFor="image-upload"
+        className="attachment-button"
+        title="Attach image"
+        >
+          <Paperclip size={22} />
+        <input
+        id="image-upload"
+        type="file"
+        accept="image/*"
+        className="image-file-input"
+        onChange={(e) => {
+          const file = e.target.files[0];
+
+          if (file) {
+            setSelectedImage(file);
+          }
+        }}
+        />
+        </label>
+
+        
+        
+
+        {/* Text Input */}
         <input
           className="composer-input"
           value={text}
@@ -467,7 +613,7 @@ console.log('selectedUserId:', selectedUserId);
                 senderId: currentUserId,
                 receiverId: selectedUserId,
                  connected: socket.connected,
-  socketId: socket.id
+                socketId: socket.id
                 
               });
 
