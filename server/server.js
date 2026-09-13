@@ -41,6 +41,16 @@ mongoose.connect(process.env.MONGO_URI)
 const onlineUsers = {};
 //Connects to Socket.IO
 io.on('connection', (socket) => {
+  socket.on('deleteMessage', ({ messageId, receiverId }) => {
+    const receiverSocketId = 
+    onlineUsers[String(receiverId)];
+
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('messageDeleted', {
+        messageId
+      });
+    }
+  });
   console.log('User connected:', socket.id);
 
   socket.on('join', (userId) => {
@@ -114,6 +124,18 @@ io.on('connection', (socket) => {
       console.log('sendMessage socket error:', error);
     }
   });
+
+  // Replace old message with newer edited message
+socket.on('editMessage', ({ updatedMessage, receiverId }) => {
+  const receiverSocketId = onlineUsers[String(receiverId)];
+
+  if (receiverSocketId) {
+    io.to(receiverSocketId).emit(
+      'messageEdited',
+      updatedMessage
+    );
+  }
+});
 
   socket.on('markMessagesSeen', async ({ senderId, receiverId }) => {
     try {
@@ -214,6 +236,7 @@ socket.on('stopTyping', ({ senderId, receiverId }) => {
     io.emit('onlineUsers', Object.keys(onlineUsers));
   });
 });
+
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

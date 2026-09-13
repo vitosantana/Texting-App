@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef} from 'react';
 import { io } from 'socket.io-client';
 import { getUsers } from '../api/auth';
-import { receiveMessages, sendMessageToDb, getConversationSummaries } from '../api/messages';
+import { receiveMessages, sendMessageToDb, getConversationSummaries, deleteMessageFromDb, editMessageInDb } from '../api/messages';
 import './Home.css';
 import { MessageSquare, CircleArrowOutUpLeft, ChevronDown, Paperclip } from 'lucide-react';
 import { uploadImage } from '../api/imguploads';
@@ -26,6 +26,10 @@ function Home() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  const [deleteTime, setDeleteTime] = useState(Date.now());
+  const [messageMenu, setMessageMenu] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText] = useState('');
 
  
 // Connect/reconnect and join effect
@@ -92,6 +96,26 @@ useEffect(() => {
     fetchConversationSummaries();
   }
 }, [token, currentUserId]);
+
+// Dismiss the text delete option after 3 mins
+
+useEffect(() => {
+  const latestMessage = messages[messages.length - 1];
+
+  if (!latestMessage?.createdAt) return;
+  setDeleteTime(Date.now());
+  
+  const expiresAt =
+  new Date(latestMessage.createdAt).getTime() +
+  3 * 60 * 1000;
+
+  const timeRemaining = expiresAt - Date.now();
+  if (timeRemaining <= 0) return;
+  const timer = setTimeout(() => {
+    setDeleteTime(Date.now());
+  }, timeRemaining + 100);
+  return () => clearTimeout(timer);
+}, [messages]);
  //Message and typing listeners
 
  useEffect(() => {
@@ -166,6 +190,8 @@ const handleMessageStatusUpdated = ({ messageId, status }) => {
   );
 };
 
+
+
 const handleMessagesSeen = ({ messageIds }) => {
   setMessages((prev) =>
     prev.map((msg) =>
@@ -176,12 +202,33 @@ const handleMessagesSeen = ({ messageIds }) => {
   );
 };
 
+const handleMessageEdited = (updatedMessage) => {
+    setMessages((prev) =>
+    prev.map((msg) =>
+    String(msg._id) === String(updatedMessage._id)
+    ? updatedMessage
+    :msg
+  )
+);
+
+const senderId = String(updatedMessage.senderId);
+
+setChatPrev((prev) => ({
+  ...prev,
+  [senderId]: {
+    lastMessage: updatedMessage.text,
+    createdAt: updatedMessage.CreatedAt
+  }
+}));
+  };
+
     socket.on('receiveMessage', handleReceiveMessage);
     socket.on('typing', handleTyping);
     socket.on('stopTyping', handleStopTyping);
     socket.on('onlineUsers', handleOnlineUsers);
     socket.on('messageStatusUpdated', handleMessageStatusUpdated);
     socket.on('messagesSeen', handleMessagesSeen);
+    socket.on('messageEdited', handleMessageEdited);
 
     return () => {
       socket.off('receiveMessage', handleReceiveMessage);
@@ -302,6 +349,57 @@ useEffect(() => {
     console.log(error);
   }
 };
+
+// Listen for clicks outside of the messageMenu
+
+useEffect(() => {
+  if (!messageMenu) return;
+
+  const handleClickAway = () => {
+    setMessageMenu(null);
+  };
+
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      setMessageMenu(null);
+    }
+  };
+
+  document.addEventListener('click', handleClickAway);
+  document.addEventListener('keydown',handleEscape);
+
+  return () => {
+    document.removeEventListener('click', handleClickAway);
+    document.removeEventListener('keydown', handleEscape);
+  };
+}, [messageMenu]);
+
+const handleDeleteMessage = async (message) => {
+  try {
+    await deleteMessageFromDb(
+      message._id,
+      token
+    );
+    // Removes the message from the sender
+
+    setMessages((prev) =>
+    prev.filter(
+      (msg) =>
+        String(msg._id) !==String(message._id)
+    )
+  );
+
+  
+
+  //Remove the message from the recipients screen
+   socket.emit('deleteMessage', {
+    messageId: message._id,
+    receiverId: message.receiverId
+   });
+  } catch (error) {
+    console.log('DELETE MESSAGE ERROR:', error);
+  }
+};
 /* validates input, build a message object, seaves it to the Db, emit it live, adds to the current UI and clears the input */
   const handleSend = async () => {
     if ((!text.trim() && !selectedImage) || !selectedUser) {
@@ -319,6 +417,8 @@ useEffect(() => {
 
         imageUrl = data.imageUrl;
       }
+
+      
     
 
     const newMessage = {
@@ -382,6 +482,115 @@ console.log('selectedUserId:', selectedUserId);
 
     return bTime - aTime;
   });
+
+  const handleMessageContextMenu = (
+        e,
+        message,
+        canDelete,
+        canEdit
+      ) => {
+        e.preventDefault();
+
+        const isMyMessage =
+        String(message.senderId) === String(currentUserId);
+
+        //Don't open a menu for someone else's message
+
+        if (!isMyMessage) {
+          setMessageMenu(null);
+          return;
+        }
+
+        //Don't open an empty menu when the time has expired
+
+        if (!canDelete && !canEdit) {
+          setMessageMenu(null);
+          return;
+        }
+        
+        setMessageMenu({
+          message,
+          x: e.clientX,
+          y: e.clientY,
+          canDelete,
+          canEdit
+        });
+      };
+      
+      const handleSaveEdit = async () => {
+        if (!editingMessage || !editText.trim()) {
+          return;
+        }
+
+        try {
+          const { data: updatedMessage } =
+          await editMessageInDb(
+            editingMessage._id,
+            editText,
+            token
+          );
+
+          setMessages((prev) =>
+          prev.map((msg) =>
+          String(msg._id) === String(updatedMessage._id)
+          ? updatedMessage
+          : msg
+          )
+          );
+
+          setChatPrev((prev) => ({
+            ...prev,
+            [String(updatedMessage.receiverId)]: {
+              lastMessage: updatedMessage.text,
+              createdAt: updatedMessage.createdAt
+            }
+          }));
+
+         socket.emit('editMessage', {
+          updatedMessage,
+          receiverId: updatedMessage.receiverId
+         });
+         
+         setEditingMessage(null);
+         setEditText('');
+        } catch (error) {
+          console.log(
+            'EDIT MESSAGE ERROR:',
+            error.response?.data || error
+          );
+        }
+      }
+
+  const formatChatTime = (createdAt) => {
+    if (!createdAt) return '';
+
+    const messageDate = new Date(createdAt);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() -1);
+
+    const isSameDay = (date1, date2) =>
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate();
+
+      if (isSameDay(messageDate, today)) {
+        return messageDate.toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit'
+        });
+      }
+
+      if (isSameDay(messageDate, yesterday)) {
+        return 'Yesterday';
+      }
+
+      return messageDate.toLocaleDateString([], {
+        month: 'numeric',
+        day: 'numeric',
+        year: '2-digit'
+      });
+  };
   return (
     <div className="app-frame">
       <aside className="icon-sidebar">
@@ -429,12 +638,22 @@ console.log('selectedUserId:', selectedUserId);
               <div className="chat-list-content">
 
               <div className="chat-list-text">
+                <div className="chat-list-top-row">
+                  
+                
                 <span className={`chat-name ${
                   unreadCounts[String(user._id)] > 0 ? 'unread' : ''
                 }`}
                 >
                   {user.username}
                   </span>
+                  {chatPrev[user._id]?.createdAt && (
+                    <span className="chat-time">
+                      {formatChatTime(chatPrev[user._id].createdAt)}
+                   
+                    </span>
+                  )}
+                  </div>
                 <span className={`chat-preview ${
                   unreadCounts[String(user._id)] > 0 ? 'unread' : ''
                 }`}
@@ -494,13 +713,32 @@ console.log('selectedUserId:', selectedUserId);
           const isMine = String(msg.senderId) === String(currentUserId);
           // Scroll Logic for Images
           const isLastMessage = index === messages.length -1;
+          const messageAge =
+          deleteTime - new Date (msg.createdAt).getTime()
+          
+          const deleteWindow = messageAge <= 3 * 60 * 1000;
+          const canDelete = isMine && isLastMessage && deleteWindow;
+          const canEdit =
+          isMine &&
+          isLastMessage &&
+          deleteWindow &&
+          Boolean(msg.text?.trim());
 
           return (
             <div
               key={index}
               className={`message-row ${isMine ? 'mine' : 'theirs'}`}
             >
-              <div className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}>
+              <div className={`message-bubble ${isMine ? 'mine' : 'theirs'}`}
+              onContextMenu={(e) =>
+              handleMessageContextMenu(
+                e,
+                msg,
+                canDelete,
+                canEdit
+              )
+              }
+              >
               {msg.imageUrl && (
                 <img
                 src={`http://localhost:5000${msg.imageUrl}`}
@@ -517,23 +755,34 @@ console.log('selectedUserId:', selectedUserId);
                 }}
                 />
               )}
-                {msg.text && (
-                  <span className="message-text">{msg.text}</span>
-                )}
+                
+                 {msg.text && (
+                  <span className="message-text">
+                    {msg.text}
+                  </span>
+                 )}
+                <div className ="message-meta">
+                  {msg.edited && (
+                    <span className="edited-label">
+                      Edited
+                    </span>
+                  )}
                 <span className="message-time">
                   {new Date(msg.createdAt).toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit'
                   })}
+                  </span>
 
                   {isMine && (
                     <span className={`message-status ${msg.status}`}>
-                      {msg.status === 'sent' && '✓' }
-                      {msg.status === 'delivered' && '✓✓'}
-                      {msg.status === 'seen' && '✓✓'}
+                      {msg.status === 'sent' && 'Sent' }
+                      {msg.status === 'delivered' && 'Delivered'}
+                      {msg.status === 'seen' && 'Read'}
                     </span>
                   )}
-                </span>
+                </div>
+                
               </div>
             </div>
           );
@@ -651,8 +900,130 @@ console.log('selectedUserId:', selectedUserId);
     </div>
   )}
 </main>
+{/* Message Menu */}
+
+{messageMenu && (
+  <div
+    className="message-context-menu"
+    style={{
+      left: messageMenu.x,
+      top: messageMenu.y
+    }}
+    onClick={(e) => e.stopPropagation()}
+  >
+
+    {messageMenu.canEdit && (
+      <button
+        onClick={() => {
+          setEditingMessage(messageMenu.message);
+          setEditText(messageMenu.message.text);
+          setMessageMenu(null);
+        }}
+      >
+        Edit
+      </button>
+    )}
+
+    {messageMenu.canDelete && (
+      <button
+        onClick={() => {
+          handleDeleteMessage(messageMenu.message);
+          setMessageMenu(null);
+        }}
+      >
+        Delete
+      </button>
+    )}
+  </div>
+)}
+
+{/* Edit Modal */}
+
+{editingMessage && (
+  <div
+    className="edit-modal-backdrop"
+    onClick={() => {
+      setEditingMessage(null);
+      setEditText('');
+    }}
+  >
+    <div
+      className="edit-modal"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="edit-modal-header">
+        <button
+          className="edit-modal-close"
+          onClick={() => {
+            setEditingMessage(null);
+            setEditText('');
+          }}
+        >
+          ×
+        </button>
+
+        <span>Edit Message</span>
+      </div>
+
+      <div className="edit-modal-preview">
+        <div className="edit-preview-bubble">
+          <span>{editText}</span>
+
+          <div className="edit-preview-meta">
+            <span>Edited</span>
+
+            <span>
+              {new Date(
+                editingMessage.createdAt
+              ).toLocaleTimeString([], {
+                hour: 'numeric',
+                minute: '2-digit'
+              })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="edit-modal-composer">
+        <textarea
+          className="edit-modal-input"
+          value={editText}
+          autoFocus
+          onChange={(e) =>
+            setEditText(e.target.value)
+          }
+          onKeyDown={(e) => {
+            if (
+              e.key === 'Enter' &&
+              !e.shiftKey
+            ) {
+              e.preventDefault();
+              handleSaveEdit();
+            }
+
+            if (e.key === 'Escape') {
+              setEditingMessage(null);
+              setEditText('');
+            }
+          }}
+        />
+
+        <button
+          className="edit-save-button"
+          onClick={handleSaveEdit}
+          disabled={!editText.trim()}
+        >
+          ✓
+        </button>
+      </div>
     </div>
-  );
+  </div>
+)}
+
+</div>
+);
+
+   
 }
 
 export default Home;

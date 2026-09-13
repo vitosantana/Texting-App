@@ -27,3 +27,27 @@ export const receiveMessages = (userId, token) =>
             }
         );
     };
+
+    export const deleteMessageFromDb = (messageId, token) => {
+        return axios.delete(`${API}/${messageId}`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+    };
+
+    export const editMessageInDb = (
+        messageId,
+        text,
+        token
+    ) => {
+        return axios.patch(
+            `${API}/${messageId}`,
+            { text},
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        );
+    };

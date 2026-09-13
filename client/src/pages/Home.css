@@ -121,6 +121,21 @@ input {
     border-bottom: 1px solid rgba(134, 150, 160, 0.08);
 }
 
+.chat-list-top-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.chat-time {
+    font-size: 11px;
+    color: #8696a0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .chat-list-item:hover {
     background: #202c33;
 }
@@ -249,10 +264,16 @@ input {
 }
 
 .message-bubble {
-   display: flex;
-   flex-direction: column;
-   gap: 6px;
+   position: relative;
+   max-width: 65%;
+   padding: 8px 12px;
+   border-radius: 18px;
+   font-size: 16px;
+   line-height: 1.3;
+   word-wrap: break-word;
+   overflow-wrap: break-word;
 }
+
 
 .message-text {
     line-height: 1.4;
@@ -327,15 +348,23 @@ input {
 }
 
 .message-bubble.mine {
-    background: #005c4b;
+    background: #a87afc;
     color: #e9edef;
-    border-top-right-radius: 0;
+    border-top-right-radius: 5px;
+}
+
+.message-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 3px;
 }
 
 .message-bubble.theirs {
     background: #202c33;
     color: #e9edef;
-    border-top-left-radius: 0;
+    border-top-left-radius: 5px;
 }
 
 .message-composer {
@@ -348,9 +377,10 @@ input {
 }
 
 .message-status {
- margin-left: 4px;
- font-size: 13px;
- font-weight: 600;   
+ margin-left: 5px;
+ font-size: 11px;
+ font-weight: 400;
+ color: #8696a0;   
 }
 
 .message-status.sent {
@@ -358,11 +388,38 @@ input {
 }
 
 .message-status.delivered {
-    color: #8696a0;
+    color: #56ff6c;
 }
 
 .message-status.seen {
-    color: #53bdeb;
+    color: #56ff6c;
+}
+
+.message-context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 140px;
+    padding: 6px;
+    background: #2c2c2e;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.message-context-menu button {
+    display: block;
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: white;
+    text-align: left;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.message-context-menu button:hover {
+    background: #3a3a3c;
 }
 
 .composer-input {
@@ -467,4 +524,105 @@ input {
 .chat-preview.unread {
     color: #e9edef;
     font-weight: 700;
+}
+
+.edit-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.edit-modal {
+    width: min(540px, 90vw);
+    overflow: hidden;
+    background: #202c33;
+    border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+}
+
+.edit-modal-header {
+    height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    background: #202c33;
+    color: #e9edef;
+    font-size: 16px;
+}
+
+edit-modal-close {
+    border: none;
+    background: transparent;
+    color: #aebac1;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.edit-modal-preview {
+    min-height: 190px;
+    padding: 30px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    background: #0b141a;
+}
+
+.edit-preview-bubble {
+    max-width: 75%;
+    padding: 9px 12px;
+    border-radius: 14px;
+    background: #005c4b;
+    color: white;
+}
+
+.edit-preview-meta {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.edit-modal-composer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: #202c33;
+}
+
+.edit-modal-input {
+    flex:1;
+    min-height: 42px;
+    max-height: 120px;
+    padding: 10px 12px;
+    resize: none;
+    border: none;
+    border-radius: 10px;
+    outline: none;
+    background: #2a3942;
+    color: #e9edef;
+    font: inherit;
+}
+
+edit-save-button {
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: #00a884;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.edit-save-button:disabled {
+    opacity: 0.45;
+    cursor: default;
 }

@@ -84,6 +84,77 @@ router.get('/conversation-summaries', authMiddleware, async (req, res) => {
  }
 });
 
+router.delete('/:messageId', authMiddleware, async (req, res) => {
+  try {
+    const currentUserId = String(req.user.userId);
+    const messageId = req.params.messageId;
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({
+        message: 'Message not found'
+      });
+    }
+
+    // Only the sender can delete the message
+    if ( String(message.senderId) !== currentUserId) {
+      return res.status(403).json({
+        message: 'You cannot delete this message'
+      });
+    }
+
+    const threeMinutes = 3 * 60 * 1000;
+    const messageAge = Date.now() - new Date(message.createdAt).getTime();
+
+    if (messageAge > threeMinutes) {
+      return res.status(403).json({
+        message: 'The delete window has expired'
+      });
+    }
+
+    const latestMessage = await Message.findOne({
+      $or: [
+        {
+          senderId: message.senderId,
+          receiverId: message.receiverId
+        },
+        {
+          senderId: message.senderId,
+          receiverId: message.receiverId
+        },
+        {
+          senderId: message.receiverId,
+          receiverId: message.senderId
+        }
+      ]
+    }).sort({
+      createdAt: -1,
+      _id: -1
+    });
+
+    if (
+      !latestMessage ||
+      String(latestMessage._id) !== String(message._id)
+    ) {
+      return res.status(403).json({
+        message: 'Only the most recent message can be deleted'
+      });
+    }
+
+    await Message.findByIdAndDelete(messageId);
+
+    res.json({
+      message: 'Message deleted',
+      messageId
+    });
+  } catch (error) {
+    console.log('DELETE MESSAGE ERROR:', error);
+
+    res.status(500).json({
+      message: 'Server error'
+    });
+  }
+});
+
 router.get('/:userId', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.userId;
@@ -99,6 +170,81 @@ router.get('/:userId', authMiddleware, async (req, res) => {
     res.json(messages);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.patch('/:messageId', authMiddleware, async (req, res) => {
+  try {
+    const currentUserId = String(req.user.userId);
+    const messageId = req.params.messageId;
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.staus(400).json({
+        message: 'Message cannot be empty'
+      });
+    }
+
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({
+        message: 'Message not found'
+      });
+    }
+
+    // Ensures the sender is the editor
+
+    if (String(message.senderId) !== currentUserId) {
+      return res.status(403).json({
+        message: 'You cannot edit this message'
+      });
+    }
+
+    // Only text message can be edited
+    if (!message.text) {
+      return res.status(400).json({
+        message: 'The edit window has expired'
+      });
+    }
+
+    // Ensures its the most recent message
+
+    const latestMessage = await Message.findOne({
+      $or: [
+        {
+          senderId: message.senderId,
+          receiverId: message.receiverId
+        },
+        {
+          senderId: message.receiverId,
+          receiverId: message.senderId
+        }
+      ]
+    }).sort({
+      createdAt: -1,
+      _id: -1
+    });
+
+    if (
+      !latestMessage ||
+      String(latestMessage._id) !== String(message._id)
+    ) {
+      return res.status(403).json({
+        message: 'Only the most recent message can be edited'
+      });
+    }
+
+    message.text = text.trim();
+    message.edited = true;
+    await message.save();
+    res.json(message);
+  } catch (error) {
+    console.log('EDIT MESSAGE ERROR:', error);
+
+    res.status(500).json({
+      message: 'Server error'
+    });
   }
 });
 

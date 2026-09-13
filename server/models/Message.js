@@ -26,9 +26,15 @@ const messageSchema = new mongoose.Schema (
             type: String,
             enum: ['sent', 'delivered', 'seen'],
             default: 'sent'
+        },
+        
+        edited: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true}
+    
 );
 
 module.exports = mongoose.model('Message', messageSchema);
