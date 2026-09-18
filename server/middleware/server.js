@@ -45,6 +45,7 @@ io.on('connection', (socket) => {
   socket.on('join', (userId) => {
     //converts the user Id into a string
     const normalizedUserId = String(userId);
+    socket.userId = normalizedUserId;
     onlineUsers[normalizedUserId] = socket.id;
      console.log('user joined socket map:', {
       userId: normalizedUserId,
@@ -113,6 +114,46 @@ socket.on('stopTyping', ({ senderId, receiverId }) => {
 
     io.emit('onlineUsers', Object.keys(onlineUsers));
   });
+
+ socket.on('joinGroup', async (groupId) => {
+  try {
+    const userId = socket.userId;
+
+    if (!userId) {
+      console.log(
+        'JOIN GROUP FAILED: socket has no userId'
+      );
+      return
+    }
+
+    const group = await Group.findOne({
+      _id: groupId,
+      members: userId
+    });
+
+    if (!group) {
+      console.log(
+        'JOIN GROUP FAILED: user is not a member'
+      );
+      return;
+    }
+
+    const roomName = `group:${groupId}`;
+    socket.join(roomName);
+
+    console.log('USER JOINED GROUP ROOM:', {
+      userId,
+      groupId,
+      roomName
+
+    });
+  } catch (error) {
+    console.log(
+      'JOIN GROUP SOCKET ERROR:',
+      error
+    );
+  }
+ }) 
 });
 
 const PORT = process.env.PORT || 5000;

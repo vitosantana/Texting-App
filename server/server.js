@@ -15,7 +15,8 @@ const authRoutes = require('./routes/auth');
 const messageRoutes = require('./routes/messages');
 const Message = require('./models/Message');
 const uploadRoutes = require('./routes/uploads');
-
+const groupRoutes = require('./routes/groups');
+const Group = require('./models/Group');
 const app = express();
 const server = http.createServer(app);
 
@@ -33,6 +34,7 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/groups', groupRoutes);
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
@@ -56,6 +58,7 @@ io.on('connection', (socket) => {
   socket.on('join', (userId) => {
     //converts the user Id into a string
     const normalizedUserId = String(userId);
+    socket.userId = normalizedUserId;
     onlineUsers[normalizedUserId] = socket.id;
      console.log('user joined socket map:', {
       userId: normalizedUserId,
@@ -235,6 +238,111 @@ socket.on('stopTyping', ({ senderId, receiverId }) => {
 
     io.emit('onlineUsers', Object.keys(onlineUsers));
   });
+
+  socket.on('joinGroup', async (groupId) => {
+  try {
+    const userId = socket.userId;
+
+    if (!userId) {
+      console.log(
+        'JOIN GROUP FAILED: socket has no userId'
+      );
+      return
+    }
+
+    const group = await Group.findOne({
+      _id: groupId,
+      members: userId
+    });
+
+    if (!group) {
+      console.log(
+        'JOIN GROUP FAILED: user is not a member'
+      );
+      return;
+    }
+
+    const roomName = `group:${groupId}`;
+
+socket.join(roomName);
+
+console.log('USER JOINED GROUP ROOM:', {
+  userId,
+  socketId: socket.id,
+  groupId,
+  roomName
+});
+
+const socketsInRoom =
+  io.sockets.adapter.rooms.get(roomName);
+
+console.log(
+  'SOCKETS CURRENTLY IN ROOM:',
+  socketsInRoom
+    ? Array.from(socketsInRoom)
+    : []
+);
+  } catch (error) {
+    console.log(
+      'JOIN GROUP SOCKET ERROR:',
+      error
+    );
+  }
+ })
+ 
+ socket.on(
+  'sendGroupMessage',
+  async ({ groupId, messageId }) => {
+    try {
+      const userId = socket.userId;
+
+      if (!userId) {
+        return;
+      }
+
+      // Fetch the message from MongoDB
+      const message = await Message.findOne({
+        _id: messageId,
+        groupId,
+        senderId: userId
+      }).populate(
+        'senderId',
+        'username'
+      );
+
+      if (!message) {
+        console.log(
+          'GROUP SOCKET MESSAGE NOT FOUND'
+        );
+        return;
+      }
+
+      const roomName =
+        `group:${groupId}`;
+
+      console.log(
+        'BROADCASTING GROUP MESSAGE:',
+        {
+          roomName,
+          messageId
+        }
+      );
+
+      socket
+        .to(roomName)
+        .emit(
+          'receiveGroupMessage',
+          message
+        );
+
+    } catch (error) {
+      console.log(
+        'SEND GROUP SOCKET ERROR:',
+        error
+      );
+    }
+  }
+);
 });
 
 

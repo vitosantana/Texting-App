@@ -5,7 +5,7 @@ import { receiveMessages, sendMessageToDb, getConversationSummaries, deleteMessa
 import './Home.css';
 import { MessageSquare, CircleArrowOutUpLeft, ChevronDown, Paperclip } from 'lucide-react';
 import { uploadImage } from '../api/imguploads';
-
+import { getGroups, createGroup, getGroupMessages, sendGroupMessage} from '../api/groups';
 const socket = io('http://localhost:5000');
 
 function Home() {
@@ -30,6 +30,12 @@ function Home() {
   const [messageMenu, setMessageMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [editText, setEditText] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState([]);
+  const [creatingGroup, setCreatingGroup] = useState(false);// Prevents Double submissions
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
  
 // Connect/reconnect and join effect
@@ -211,6 +217,8 @@ const handleMessageEdited = (updatedMessage) => {
   )
 );
 
+
+
 const senderId = String(updatedMessage.senderId);
 
 setChatPrev((prev) => ({
@@ -240,6 +248,50 @@ setChatPrev((prev) => ({
     };
   
  }, [selectedUserId]);
+
+useEffect(() => {
+  const handleReceiveGroupMessage = (
+    newMessage
+  ) => {
+    console.log(
+      'RECEIVED GROUP MESSAGE:',
+      newMessage
+    );
+
+    const incomingGroupId =
+      String(newMessage.groupId);
+
+    const openGroupId =
+      String(selectedGroup?._id || '');
+
+    // Only display messages if the group is open
+    if (
+      incomingGroupId === openGroupId
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        newMessage
+      ]);
+
+      requestAnimationFrame(() => {
+        scrollToBottom('smooth');
+      });
+    }
+  };
+
+  socket.on(
+    'receiveGroupMessage',
+    handleReceiveGroupMessage
+  );
+
+  return () => {
+    socket.off(
+      'receiveGroupMessage',
+      handleReceiveGroupMessage
+    );
+  };
+}, [selectedGroup]);
+
 //Loads the list of users 
 useEffect(() => {
   const fetchUsers = async () => {
@@ -260,6 +312,94 @@ useEffect(() => {
     fetchUsers();
   }
 }, [token, currentUserId]);
+
+// Load Groups
+
+useEffect(() => {
+  const fetchGroups = async () => {
+    try {
+      const { data } = await getGroups(token);
+
+      setGroups(data);
+    } catch (error) {
+      console.log('GET GROUPS ERROR:', error);
+    }
+  };
+
+  if (token && currentUserId) {
+    fetchGroups();
+  }
+}, [token, currentUserId]);
+
+const handleGroupMemberToggle = (userId) => {
+  const normalizedId = String(userId);
+
+  setSelectedGroupMembers((prev) => {
+    if (prev.includes(normalizedId)) {
+      return prev.filter(
+        (id) => id !== normalizedId
+      );
+    }
+
+    return [
+      ...prev,
+      normalizedId
+    ];
+  });
+};
+
+const handleCreateGroup = async () => {
+  console.log('CREATE BUTTON CLICKED');
+  console.log('Group DATA:', {
+    groupName,
+    selectedGroupMembers,
+    tokenExists: !!token
+  });
+  if (!groupName.trim()) {
+    console.log('STOPPED: no group name');
+    return;
+  }
+
+  if (selectedGroupMembers.length === 0) {
+    console.log('STOPPED: no members selected');
+    return;
+  }
+
+  try {
+    setCreatingGroup(true);
+    console.log('ABOUT TO CALL createGROUP')
+    const { data: newGroup } =
+    await createGroup(
+      {
+        name: groupName.trim(),
+        members: selectedGroupMembers
+      },
+      token
+    );
+
+    console.log('GROUP RESPONSE:', newGroup);
+
+    //Adds the new group to the UI
+    setGroups((prev) => [
+      newGroup,
+      ...prev
+    ]);
+
+    //Reset form
+    setGroupName('');
+    setSelectedGroupMembers([]);
+    setShowCreateGroup(false);
+  
+  } catch (error) {
+    console.log(
+      'CREATE GROUP ERROR:',
+      error.response?.data || error
+    );
+  } finally {
+    setCreatingGroup(false);
+  }
+};
+
 
 // Previews image when image is selected
 
@@ -305,6 +445,7 @@ useEffect(() => {
 }, [messages]);
 
   const handleSelectUser = async (user) => {
+    setSelectedGroup(null);
   if (selectedUserId && text.trim()) {
     socket.emit('stopTyping', {
       senderId: currentUserId,
@@ -507,7 +648,7 @@ console.log('selectedUserId:', selectedUserId);
           setMessageMenu(null);
           return;
         }
-        
+
         setMessageMenu({
           message,
           x: e.clientX,
@@ -561,6 +702,134 @@ console.log('selectedUserId:', selectedUserId);
         }
       }
 
+      const handleSelectGroup = async (group) => {
+        try {
+        setSelectedGroup(group);
+
+        // Close any DM that is currently selected
+        setSelectedUser(null);
+
+        // Prevent Old DM messages from remaining on screen
+        setMessages([]);
+        setText('');
+        setIsTyping(false);
+        console.log('LOADING GROUP MESSAGES:',
+          group._id
+        );
+        
+
+        const { data } = await getGroupMessages(
+          group._id,
+          token
+        );
+
+        console.log(
+          'GROUP MESSAGES LOADED:',
+          data
+        );
+
+
+        setMessages(data);
+      } catch (error) {
+        console.log('GET GROUP MESSAGES ERROR:',
+          error.response?.data || errir
+        )
+      };
+    };
+
+    const handleSendGroupMessage = async () => {
+      if (!selectedGroup) return;
+      
+      if (!text.trim() && !selectedImage) {
+        return;
+      }
+
+      try {
+        let imageUrl = '';
+
+        //Image Upload
+        if (selectedImage) {
+          const { data } = await uploadImage(
+            selectedImage,
+            token
+          );
+
+          imageUrl = data.imageUrl;
+        }
+
+        const { data: newMessage } =
+        await sendGroupMessage(
+          selectedGroup._id,
+          {
+            text: text.trim(),
+            imageUrl
+          },
+          token
+        );
+
+        console.log(
+          'GROUP MESSAGE SAVED:',
+          newMessage
+        );
+
+        socket.emit('sendGroupMessage', {
+          groupId: selectedGroup._id,
+          messageId: newMessage._id
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          newMessage
+        ]);
+
+        setText('');
+        setSelectedImage(null);
+        requestAnimationFrame(() => {
+          scrollToBottom('smooth');
+        });
+      } catch (error) {
+        console.log(
+          'SEND GROUP MESSAGE ERROR:',
+          error.response?.data || error
+        );
+      }
+    };
+
+    useEffect(() => {
+      if (!currentUserId || groups.length === 0) {
+        return;
+      }
+
+      const joinGroupRooms = () => {
+        groups.forEach((group) => {
+          console.log(
+            'JOINING GROUP ROOM:',
+            group._id
+          );
+
+          socket.emit(
+            'joinGroup',
+            group._id
+          );
+        });
+      };
+
+      // Join asap if socket is already connected
+      if (socket.connected) {
+        joinGroupRooms();
+      }
+
+      // Rejoin after reconnecting
+      socket.on('connect', joinGroupRooms);
+
+      return () => {
+        socket.off(
+          'connect',
+          joinGroupRooms
+        );
+      };
+    }, [groups, currentUserId]);
+
   const formatChatTime = (createdAt) => {
     if (!createdAt) return '';
 
@@ -612,6 +881,14 @@ console.log('selectedUserId:', selectedUserId);
           <h1>Chats</h1>
           <p className="logged-in-user">@{currentUser?.username}</p>
         </div>
+        
+        <button
+        className="create-group-button"
+        onClick={() => setShowCreateGroup(true)}
+        >
+          New Group
+
+        </button>
 
         <div className="search-bar-wrap">
           <input
@@ -623,6 +900,48 @@ console.log('selectedUserId:', selectedUserId);
         </div>
 
         <div className="chat-list">
+
+          {/* Group chats */}
+          {groups.map((group) => (
+            <button
+            key={group._id}
+            className={`chat-list-item ${
+              selectedGroup?._id === group._id
+              ? 'selected'
+              : ''
+            }`}
+            onClick={() => handleSelectGroup(group)}
+            >
+
+              <div className="chat-avatar group-avatar">
+                {group.name.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="chat-list-content">
+                <div className="chat-list-text">
+                  <div className="chat-list-top-row">
+                    <span className="chat-name">
+                      {group.name}
+                    </span>
+
+                    {group.updatedAt && (
+                      <span className="chat-time">
+                        {formatChatTime(group.updatedAt)}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="chat-preview">
+                    Group . {group.members?.length || 0} members
+
+                  </span>
+                </div>
+              </div>
+
+            </button>
+          ))}
+
+          {/* Direct Messages */}
           {sortedUsers.map((user) => (
             <button
               key={user._id}
@@ -677,26 +996,140 @@ console.log('selectedUserId:', selectedUserId);
       </section>
 
       <main className="conversation-panel">
-  {selectedUser ? (
-    <>
-      <div className="conversation-header">
-        <div className="conversation-user">
-          <div className="chat-avatar small">
-            {selectedUser.username.charAt(0).toUpperCase()}
-          </div>
-        </div>
+  {selectedGroup ? (
+  <div className="group-conversation">
 
-        <div className="conversation-meta">
-          <h2>{selectedUser.username}</h2>
-          <p>{selectedUserIsOnline ? 'Online' : 'Offline'}</p>
+    <div className="conversation-header">
+      <div className="conversation-user">
+        <div className="chat-avatar small">
+          {selectedGroup.name.charAt(0).toUpperCase()}
         </div>
       </div>
+
+      <div className="conversation-meta">
+        <h2>{selectedGroup.name}</h2>
+        <p>
+          {selectedGroup.members?.length || 0} members
+        </p>
+      </div>
+    </div>
+
+    {/* MESSAGES PANEL */}
+    <div
+      className="messages-panel group-messages-panel"
+      ref={messagesPanelRef}
+      onScroll={() => {
+        const panel = messagesPanelRef.current;
+
+        if (!panel) return;
+
+        const distanceFromBottom =
+          panel.scrollHeight -
+          panel.scrollTop -
+          panel.clientHeight;
+
+        setShowScrollButton(
+          distanceFromBottom > 120
+        );
+      }}
+    >
+      {messages.map((msg) => {
+        const senderId =
+          msg.senderId?._id || msg.senderId;
+
+        const isMine =
+          String(senderId) ===
+          String(currentUserId);
+
+        return (
+          <div
+            key={msg._id}
+            className={`message-row ${
+              isMine ? 'mine' : 'theirs'
+            }`}
+          >
+            <div
+              className={`message-bubble ${
+                isMine ? 'mine' : 'theirs'
+              }`}
+            >
+              {!isMine &&
+                msg.senderId?.username && (
+                  <span className="group-message-sender">
+                    {msg.senderId.username}
+                  </span>
+                )}
+
+              {msg.imageUrl && (
+                <img
+                  src={`http://localhost:5000${msg.imageUrl}`}
+                  alt="Group attachment"
+                  className="message-image"
+                />
+              )}
+
+              {msg.text && (
+                <span className="message-text">
+                  {msg.text}
+                </span>
+              )}
+
+              <div className="message-meta">
+                <span className="message-time">
+                  {new Date(
+                    msg.createdAt
+                  ).toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div ref={messagesEndRef} />
+    </div>
+
+    {/* Message Composer */}
+    <div className="message-composer group-message-composer">
+      <textarea
+        className="composer-input"
+        value={text}
+        rows={1}
+        onChange={(e) =>
+          setText(e.target.value)
+        }
+        onKeyDown={(e) => {
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey
+          ) {
+            e.preventDefault();
+            handleSendGroupMessage();
+          }
+        }}
+        placeholder={`Message ${selectedGroup.name}`}
+      />
+
+      <button
+        className="send-button"
+        onClick={handleSendGroupMessage}
+      >
+        Send
+      </button>
+    </div>
+
+  </div>
+) : selectedUser ? (
+  <>
 
       {isTyping && (
         <p className="typing-indicator">{selectedUser.username} is typing...</p>
       )}
 
-      <div className="messages-panel"
+      <div className="messages-panel group-messages-panel"
         ref={messagesPanelRef}
         onScroll={() => {
           const panel = messagesPanelRef.current;
@@ -850,9 +1283,10 @@ console.log('selectedUserId:', selectedUserId);
         
 
         {/* Text Input */}
-        <input
+        <textarea
           className="composer-input"
           value={text}
+          rows={1}
           onChange={(e) => {
             const value = e.target.value;
             setText(value);
@@ -881,7 +1315,7 @@ console.log('selectedUserId:', selectedUserId);
           }}
 
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               handleSend();
             }
@@ -1017,6 +1451,102 @@ console.log('selectedUserId:', selectedUserId);
         </button>
       </div>
     </div>
+  </div>
+)}
+
+{/* Group Modal */}
+
+{showCreateGroup && (
+  <div
+  className="group-modal-backgroup"
+  onClick={() => {
+    setShowCreateGroup(false);
+    setGroupName('');
+    setSelectedGroupMembers([]);
+  }}
+  >
+    <div
+    className='group-modal'
+    onClick={(e) => e.stopPropagation()}
+    >
+      <div className="group-modal-header">
+        <button
+        onClick={() => {
+          setShowCreateGroup(false);
+          setGroupName('');
+          setSelectedGroupMembers([]);
+        }}
+        >
+          ×
+        </button>
+
+        <h2>New Group</h2>
+
+      </div>
+
+      <input
+        className ="group-name-input"
+        type="text"
+        value={groupName}
+        onChange={(e) =>
+          setGroupName(e.target.value)
+        }
+        placeholder="Group name"
+      />
+
+      <div className="group-member-list">
+        {users.map((user) => {
+          const userId = String(user._id);
+
+          const selected = selectedGroupMembers.includes(userId);
+
+          return (
+            <button
+            key={user._id}
+            type="button"
+            className={`group-member-item ${
+              selected ? 'selected': ''
+            }`}
+            onClick={() => 
+              handleGroupMemberToggle(user._id)
+            }
+            >
+              <div className="chat-avatar small">
+                {user.username
+                .charAt(0)
+                .toUpperCase()}
+              </div>
+
+              <span>{user.username}</span>
+
+              <span className="group-member-check">
+                {selected ?  '✓' : '' }
+              </span>
+
+            </button>
+          );
+        })}
+
+      </div>
+
+      <button
+      className="create-group-submit"
+      onClick={handleCreateGroup}
+      disabled={
+        !groupName.trim() ||
+        selectedGroupMembers.length === 0 ||
+        creatingGroup
+      }
+      >
+
+        {creatingGroup
+        ? 'Creating...'
+      : 'Create Group'}
+
+      </button>
+
+    </div>
+
   </div>
 )}
 
